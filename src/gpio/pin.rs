@@ -689,6 +689,7 @@ pub struct IoPin {
     pin: Pin,
     mode: Mode,
     prev_mode: Option<Mode>,
+    async_interrupt: Option<AsyncInterrupt>,
     reset_on_drop: bool,
     bias: Bias,
     pub(crate) soft_pwm: Option<SoftPwm>,
@@ -723,6 +724,7 @@ impl IoPin {
             pin,
             mode,
             prev_mode,
+            async_interrupt: None,
             reset_on_drop: true,
             bias: Bias::Off,
             soft_pwm: None,
@@ -761,6 +763,50 @@ impl IoPin {
         }
 
         self.pin.set_mode(mode);
+    }
+
+    /// Configures an asynchronous interrupt trigger, which executes the callback on a
+    /// separate thread when the interrupt is triggered.
+    ///
+    /// An optional debounce duration can be specified to filter unwanted input noise.
+    ///
+    /// The callback closure or function pointer is called with a single [`Event`] argument.
+    ///
+    /// Any previously configured (a)synchronous interrupt triggers for this pin are cleared
+    /// when `set_async_interrupt` is called, or when `InputPin` goes out of scope.
+    ///
+    /// [`clear_async_interrupt`]: #method.clear_async_interrupt
+    /// [`Event`]: struct.Event.html
+    pub fn set_async_interrupt<C>(
+        &mut self,
+        trigger: Trigger,
+        debounce: Option<Duration>,
+        callback: C,
+    ) -> Result<()>
+    where
+        C: FnMut(Event) + Send + 'static,
+    {
+        self.clear_interrupt()?;
+        self.clear_async_interrupt()?;
+
+        self.async_interrupt = Some(AsyncInterrupt::new(
+            self.pin.gpio_state.cdev.as_raw_fd(),
+            self.pin(),
+            trigger,
+            debounce,
+            callback,
+        )?);
+
+        Ok(())
+    }
+
+    /// Removes a previously configured asynchronous interrupt trigger.
+    pub fn clear_async_interrupt(&mut self) -> Result<()> {
+        if let Some(mut interrupt) = self.async_interrupt.take() {
+            interrupt.stop()?;
+        }
+
+        Ok(())
     }
 
 
