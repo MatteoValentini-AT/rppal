@@ -786,7 +786,6 @@ impl IoPin {
     where
         C: FnMut(Event) + Send + 'static,
     {
-        self.clear_interrupt()?;
         self.clear_async_interrupt()?;
 
         self.async_interrupt = Some(AsyncInterrupt::new(
